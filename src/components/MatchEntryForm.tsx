@@ -3,9 +3,10 @@ import { getAllHeroes } from '../data/heroes';
 import { getAllItems } from '../data/items';
 import { getAllEmblems, getEmblemById } from '../data/emblems';
 import { SPELLS } from '../data/spells';
-import { Sword, Plus, X, Shield, Goal, Crosshair, Loader2, Zap, BrainCircuit, Upload, ScanLine, AlertTriangle, AlertCircle, BookmarkPlus } from 'lucide-react';
+import { Sword, Plus, X, Shield, Goal, Crosshair, Loader2, Zap, BrainCircuit, Upload, ScanLine, AlertTriangle, AlertCircle } from 'lucide-react';
 import { MLAnalyzer } from '../services/MLAnalyzer';
 import { getHeroById } from '../data/heroes';
+
 import { scanMatchResult } from '../analytics/ocrEngine';
 import type { MatchAnalysisResult } from '../services/MLAnalyzer';
 import { PostMatchAnalysis } from './PostMatchAnalysis';
@@ -50,8 +51,6 @@ export const MatchEntryForm: React.FC = () => {
     const [scanSuccess, setScanSuccess] = useState<string | null>(null);
     const [playerNickname, setPlayerNickname] = useState<string>('');
     const [heroBuilds, setHeroBuilds] = useState<Record<string, HeroBuild>>({});
-    const [isSavingBuild, setIsSavingBuild] = useState(false);
-    const [buildSavedFor, setBuildSavedFor] = useState('');
 
     // Fetch nickname + saved hero builds from profile on mount
     useEffect(() => {
@@ -91,34 +90,6 @@ export const MatchEntryForm: React.FC = () => {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedHeroId]);
-
-    const handleSaveBuild = async () => {
-        if (!selectedHeroId) return;
-        setIsSavingBuild(true);
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.user) return;
-            const build: HeroBuild = {
-                spellId: selectedSpellId,
-                emblemId: selectedEmblemId,
-                tier1Id: selectedTier1Id,
-                tier2Id: selectedTier2Id,
-                coreId: selectedCoreId,
-                items: [...selectedItems],
-            };
-            const updated = { ...heroBuilds, [selectedHeroId]: build };
-            const { error } = await supabase
-                .from('profiles')
-                .upsert({ user_id: session.user.id, hero_builds: updated }, { onConflict: 'user_id' });
-            if (!error) {
-                setHeroBuilds(updated);
-                setBuildSavedFor(selectedHeroId);
-                setTimeout(() => setBuildSavedFor(''), 3000);
-            }
-        } finally {
-            setIsSavingBuild(false);
-        }
-    };
 
     const handleImageScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -315,26 +286,11 @@ export const MatchEntryForm: React.FC = () => {
                         ))}
                     </div>
 
-                    {/* ── Hero Build Save/Load indicator ── */}
-                    {selectedHeroId && (
-                        <div className="flex items-center justify-between pt-3 mt-2 border-t border-white/[0.04]">
-                            <span className="text-[11px] font-mono text-gray-600">
-                                {heroBuilds[selectedHeroId]
-                                    ? `↺ ${getHeroById(selectedHeroId)?.name} yapısı yüklendi`
-                                    : `${getHeroById(selectedHeroId)?.name} için yapı kaydedilmemiş`}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={handleSaveBuild}
-                                disabled={isSavingBuild}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-mlbb-purple/30 text-mlbb-purple/70 hover:border-mlbb-purple hover:text-mlbb-purple text-xs font-mono font-bold uppercase tracking-wider transition-all disabled:opacity-40"
-                            >
-                                {isSavingBuild
-                                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                                    : <BookmarkPlus className="w-3 h-3" />}
-                                {buildSavedFor === selectedHeroId ? 'Kaydedildi ✓' : 'Yapıyı Kaydet'}
-                            </button>
-                        </div>
+                    {/* ── Build load indicator ── */}
+                    {selectedHeroId && heroBuilds[selectedHeroId] && (
+                        <p className="text-[11px] font-mono text-mlbb-purple/50 pt-2 mt-1 border-t border-white/[0.04]">
+                            ↺ {getHeroById(selectedHeroId)?.name} varsayılan yapısı yüklendi
+                        </p>
                     )}
                 </div>
 

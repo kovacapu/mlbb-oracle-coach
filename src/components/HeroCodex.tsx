@@ -1,14 +1,28 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Shield, Sword, Zap, Crosshair, Users, Activity, ShieldAlert } from 'lucide-react';
+import { Search, X, Shield, Sword, Zap, Crosshair, Users, Activity, ShieldAlert, BookmarkPlus, Loader2, Plus } from 'lucide-react';
 import { HEROES } from '../data/heroes';
 import type { HeroRole, Hero } from '../data/heroes';
 import { ImageWithFallback } from './ImageWithFallback';
 import { MLAnalyzer } from '../services/MLAnalyzer';
-import { ITEMS } from '../data/items';
-import { EMBLEMS } from '../data/emblems';
+import { ITEMS, getAllItems } from '../data/items';
+import { EMBLEMS, getAllEmblems, getEmblemById } from '../data/emblems';
 import { SPELLS } from '../data/spells';
+import { supabase } from '../lib/supabase';
+
+interface HeroBuild {
+    spellId: string;
+    emblemId: string;
+    tier1Id: string;
+    tier2Id: string;
+    coreId: string;
+    items: string[];
+}
+
+const allItems = getAllItems();
+const allEmblems = getAllEmblems();
+const allSpells = Object.values(SPELLS);
 
 const ROLES: { name: HeroRole; icon: React.ReactNode; color: string }[] = [
     { name: 'Fighter', icon: <Sword className="w-3.5 h-3.5" />, color: 'text-orange-400' },
@@ -32,6 +46,78 @@ export const HeroCodex: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedRole, setSelectedRole] = useState<HeroRole | 'All'>('All');
     const [selectedHero, setSelectedHero] = useState<Hero | null>(null);
+
+    // ── Hero Build state ──
+    const [heroBuilds, setHeroBuilds] = useState<Record<string, HeroBuild>>({});
+    const [editItems, setEditItems] = useState<string[]>([]);
+    const [editSpellId, setEditSpellId] = useState('');
+    const [editEmblemId, setEditEmblemId] = useState('');
+    const [editTier1Id, setEditTier1Id] = useState('');
+    const [editTier2Id, setEditTier2Id] = useState('');
+    const [editCoreId, setEditCoreId] = useState('');
+    const [isItemPickerOpen, setIsItemPickerOpen] = useState(false);
+    const [isSavingBuild, setIsSavingBuild] = useState(false);
+    const [buildSavedFor, setBuildSavedFor] = useState('');
+
+    // Fetch saved builds on mount
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!session?.user) return;
+            supabase.from('profiles').select('hero_builds').eq('user_id', session.user.id)
+                .single().then(({ data }) => {
+                    if (data?.hero_builds) setHeroBuilds(data.hero_builds);
+                });
+        });
+    }, []);
+
+    // Load saved build (or AI recommendation) into edit state when hero selected
+    useEffect(() => {
+        if (!selectedHero) return;
+        setIsItemPickerOpen(false);
+        const saved = heroBuilds[selectedHero.id];
+        if (saved) {
+            setEditItems(saved.items || []);
+            setEditSpellId(saved.spellId || '');
+            setEditEmblemId(saved.emblemId || '');
+            setEditTier1Id(saved.tier1Id || '');
+            setEditTier2Id(saved.tier2Id || '');
+            setEditCoreId(saved.coreId || '');
+        } else {
+            // Pre-fill with AI recommendation
+            const ai = MLAnalyzer.generateBuildRecommendation(selectedHero.id, [], t as (k: string, o?: unknown) => string);
+            setEditItems(ai.coreItems || []);
+            setEditSpellId(ai.recommendedSpell || '');
+            setEditEmblemId(ai.recommendedEmblem?.id || '');
+            setEditTier1Id('');
+            setEditTier2Id('');
+            setEditCoreId(ai.recommendedEmblem?.coreId || '');
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedHero?.id]);
+
+    const handleSaveBuild = async () => {
+        if (!selectedHero) return;
+        setIsSavingBuild(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) return;
+            const build: HeroBuild = {
+                spellId: editSpellId, emblemId: editEmblemId,
+                tier1Id: editTier1Id, tier2Id: editTier2Id,
+                coreId: editCoreId, items: [...editItems],
+            };
+            const updated = { ...heroBuilds, [selectedHero.id]: build };
+            const { error } = await supabase.from('profiles')
+                .upsert({ user_id: session.user.id, hero_builds: updated }, { onConflict: 'user_id' });
+            if (!error) {
+                setHeroBuilds(updated);
+                setBuildSavedFor(selectedHero.id);
+                setTimeout(() => setBuildSavedFor(''), 3000);
+            }
+        } finally {
+            setIsSavingBuild(false);
+        }
+    };
 
     const heroesList = useMemo(() => Object.values(HEROES), []);
 
@@ -316,6 +402,162 @@ export const HeroCodex: React.FC = () => {
                                             {tag}
                                         </span>
                                     ))}
+                                </div>
+
+                                {/* ── VARSAYILAN YAPINIZ ── */}
+                                <div className="pt-4 border-t border-white/[0.06] space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <BookmarkPlus className="w-4 h-4 text-mlbb-purple" />
+                                            <h3 className="font-display font-bold text-sm tracking-widest uppercase text-white">Varsayılan Yapın</h3>
+                                        </div>
+                                        {heroBuilds[selectedHero.id] && (
+                                            <span className="text-[10px] font-mono text-mlbb-purple/60">↺ Kayıtlı yapı</span>
+                                        )}
+                                    </div>
+
+                                    {/* ─ Eşyalar ─ */}
+                                    <div>
+                                        <p className="text-[10px] font-mono text-gray-600 uppercase tracking-widest mb-2">EŞYALAR (6 slot)</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {[...Array(6)].map((_, i) => {
+                                                const itemId = editItems[i];
+                                                const item = itemId ? ITEMS[itemId] : null;
+                                                return (
+                                                    <div key={i} className="w-12 h-12 relative group">
+                                                        {item ? (
+                                                            <div
+                                                                onClick={() => setEditItems(prev => prev.filter((_, idx) => idx !== i))}
+                                                                className="w-full h-full rounded-xl border border-mlbb-gold/30 overflow-hidden cursor-pointer hover:border-mlbb-danger/60 transition-all"
+                                                                title={`${item.name} (kaldır)`}
+                                                            >
+                                                                <ImageWithFallback src={item.iconUrl} alt={item.name} className="w-full h-full object-cover" fallbackText="IT" />
+                                                                <div className="absolute inset-0 bg-mlbb-danger/60 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <X className="w-4 h-4 text-white" />
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setIsItemPickerOpen(true)}
+                                                                className="w-full h-full rounded-xl border-2 border-dashed border-white/10 text-gray-700 hover:border-mlbb-neonBlue/40 hover:text-mlbb-neonBlue transition-all flex items-center justify-center"
+                                                            >
+                                                                <Plus className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Item picker */}
+                                        {isItemPickerOpen && editItems.length < 6 && (
+                                            <div className="mt-2 rounded-xl border border-white/[0.06] bg-black/40 p-3">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="text-[10px] font-mono text-mlbb-neonBlue uppercase tracking-widest">Eşya Seç</p>
+                                                    <button onClick={() => setIsItemPickerOpen(false)} className="text-gray-600 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+                                                </div>
+                                                <div className="grid grid-cols-8 gap-1 max-h-32 overflow-y-auto">
+                                                    {allItems.filter(it => !editItems.includes(it.id)).map(it => (
+                                                        <div
+                                                            key={it.id}
+                                                            onClick={() => {
+                                                                setEditItems(prev => [...prev, it.id]);
+                                                                if (editItems.length >= 5) setIsItemPickerOpen(false);
+                                                            }}
+                                                            title={it.name}
+                                                            className="aspect-square rounded-lg border border-white/[0.06] overflow-hidden cursor-pointer hover:border-mlbb-neonBlue/40 opacity-70 hover:opacity-100 transition-all"
+                                                        >
+                                                            <ImageWithFallback src={it.iconUrl} alt={it.name} className="w-full h-full object-cover" fallbackText="IT" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* ─ Savaş Büyüsü ─ */}
+                                    <div>
+                                        <p className="text-[10px] font-mono text-gray-600 uppercase tracking-widest mb-2">SAVAŞ BÜYÜSÜ</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {allSpells.map(sp => (
+                                                <div
+                                                    key={sp.id}
+                                                    onClick={() => setEditSpellId(sp.id)}
+                                                    title={sp.name}
+                                                    className={`w-11 h-11 rounded-xl border overflow-hidden cursor-pointer transition-all ${editSpellId === sp.id ? 'border-mlbb-gold shadow-[0_0_8px_rgba(255,191,0,0.3)]' : 'border-white/[0.06] grayscale hover:grayscale-0 hover:border-white/20'}`}
+                                                >
+                                                    <ImageWithFallback src={sp.iconUrl} alt={sp.name} className="w-full h-full object-cover" fallbackText="SP" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* ─ Amblem ─ */}
+                                    <div>
+                                        <p className="text-[10px] font-mono text-gray-600 uppercase tracking-widest mb-2">AMBLEM</p>
+                                        <div className="flex flex-wrap gap-1.5 mb-3">
+                                            {allEmblems.map(emb => (
+                                                <div
+                                                    key={emb.id}
+                                                    onClick={() => { setEditEmblemId(emb.id); setEditTier1Id(''); setEditTier2Id(''); setEditCoreId(''); }}
+                                                    title={emb.name}
+                                                    className={`w-11 h-11 rounded-xl border-2 overflow-hidden cursor-pointer transition-all ${editEmblemId === emb.id ? 'border-mlbb-purple shadow-[0_0_8px_rgba(124,58,237,0.3)]' : 'border-white/[0.06] grayscale hover:grayscale-0 hover:border-mlbb-purple/30'}`}
+                                                >
+                                                    <ImageWithFallback src={emb.iconUrl} alt={emb.name} className="w-full h-full object-cover" fallbackText={emb.name.substring(0, 2)} />
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Tier talents */}
+                                        {editEmblemId && (() => {
+                                            const emb = getEmblemById(editEmblemId);
+                                            if (!emb) return null;
+                                            return (
+                                                <div className="space-y-2">
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {emb.tier1Talents?.map(t => (
+                                                            <button key={t.id} type="button" onClick={() => setEditTier1Id(t.id)}
+                                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border transition-all ${editTier1Id === t.id ? 'bg-mlbb-neonBlue/20 border-mlbb-neonBlue/50 text-mlbb-neonBlue' : 'border-white/[0.08] text-gray-500 hover:text-gray-300 hover:border-white/20'}`}>
+                                                                {t.name}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {emb.tier2Talents?.map(t => (
+                                                            <button key={t.id} type="button" onClick={() => setEditTier2Id(t.id)}
+                                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border transition-all ${editTier2Id === t.id ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' : 'border-white/[0.08] text-gray-500 hover:text-gray-300 hover:border-white/20'}`}>
+                                                                {t.name}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {emb.coreTalents?.map(t => (
+                                                            <button key={t.id} type="button" onClick={() => setEditCoreId(t.id)}
+                                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border transition-all ${editCoreId === t.id ? 'bg-mlbb-gold/20 border-mlbb-gold/50 text-mlbb-gold' : 'border-white/[0.08] text-gray-500 hover:text-gray-300 hover:border-white/20'}`}>
+                                                                {t.name}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {/* ─ Kaydet ─ */}
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveBuild}
+                                        disabled={isSavingBuild}
+                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-mlbb-purple/40 text-mlbb-purple hover:bg-mlbb-purple/10 hover:border-mlbb-purple text-sm font-mono font-bold uppercase tracking-wider transition-all disabled:opacity-40"
+                                    >
+                                        {isSavingBuild
+                                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Kaydediliyor...</>
+                                            : buildSavedFor === selectedHero.id
+                                                ? <><BookmarkPlus className="w-4 h-4" /> Kaydedildi ✓</>
+                                                : <><BookmarkPlus className="w-4 h-4" /> {selectedHero.name} Yapısını Kaydet</>
+                                        }
+                                    </button>
                                 </div>
                             </div>
                         </motion.div>
