@@ -141,7 +141,6 @@ const extractKDA = (text: string): KDAExtract | null => {
     }
 
     // Strategy 2 — three numbers separated by / or | with optional spaces
-    // MLBB shows "10 / 3 / 7" or "10/3/7" prominently in match result screen
     const simple = text.match(/\b(\d{1,2})\s*[/|\\]\s*(\d{1,2})\s*[/|\\]\s*(\d{1,2})\b/);
     if (simple) {
         return {
@@ -151,7 +150,7 @@ const extractKDA = (text: string): KDAExtract | null => {
         };
     }
 
-    // Strategy 3 — "Kills: 10  Deaths: 3  Assists: 7" style
+    // Strategy 3 — "Kills: 10  Deaths: 3  Assists: 7" keyword style
     const killsMatch = text.match(/(?:kills?|öldürme)[^\d]*(\d{1,2})/i);
     const deathsMatch = text.match(/(?:deaths?|ölüm)[^\d]*(\d{1,2})/i);
     const assistsMatch = text.match(/(?:assists?|destek)[^\d]*(\d{1,2})/i);
@@ -161,6 +160,44 @@ const extractKDA = (text: string): KDAExtract | null => {
             deaths: parseInt(deathsMatch[1], 10),
             assists: assistsMatch ? parseInt(assistsMatch[1], 10) : 0,
         };
+    }
+
+    // Strategy 4 — MLBB column layout: "K D A" header followed by three numbers
+    // OCR often reads columns as space/newline separated: "8 2 5" or "8\n2\n5"
+    const kdaHeader = text.match(/\bK\s+D\s+A\b[^\d]*(\d{1,2})\D+(\d{1,2})\D+(\d{1,2})/i);
+    if (kdaHeader) {
+        return {
+            kills: parseInt(kdaHeader[1], 10),
+            deaths: parseInt(kdaHeader[2], 10),
+            assists: parseInt(kdaHeader[3], 10),
+        };
+    }
+
+    // Strategy 5 — Three standalone small numbers (≤2 digits) appearing together,
+    // separated only by whitespace/newlines. Picks the first such triplet found.
+    // Avoids matching things like gold (4-5 digits) or timestamps.
+    const allLines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
+    for (const line of allLines) {
+        const nums = line.match(/\b(\d{1,2})\b/g);
+        if (nums && nums.length === 3) {
+            const [k, d, a] = nums.map(Number);
+            // Sanity check: reasonable KDA values
+            if (k <= 30 && d <= 30 && a <= 30) {
+                return { kills: k, deaths: d, assists: a };
+            }
+        }
+    }
+
+    // Strategy 6 — Scan all lines for any three-number sequence (last resort)
+    const allNums = (text.match(/\b\d{1,2}\b/g) || []).map(Number).filter(n => n <= 30);
+    if (allNums.length >= 3) {
+        // Try to find the most "KDA-like" triplet: all ≤20
+        for (let i = 0; i <= allNums.length - 3; i++) {
+            const [k, d, a] = allNums.slice(i, i + 3);
+            if (k <= 20 && d <= 20 && a <= 20) {
+                return { kills: k, deaths: d, assists: a };
+            }
+        }
     }
 
     return null;
@@ -200,10 +237,17 @@ export const scanMatchResult = async (
         }
 
         // Step 2: Run Tesseract
-        const worker = await Tesseract.createWorker(language);
+        // 'tur' dil paketi her zaman yüklü olmayabilir — eng ile fallback
+        let worker: Awaited<ReturnType<typeof Tesseract.createWorker>>;
+        try {
+            worker = await Tesseract.createWorker(language);
+        } catch {
+            worker = await Tesseract.createWorker('eng');
+        }
+        // Char whitelist kaldırıldı: whitelist bazen sayıları atlar
+        // Tesseract varsayılan modda sayıları daha iyi tanır
         await worker.setParameters({
-            // Wider whitelist than before — hero names contain mixed case + spaces
-            tessedit_char_whitelist: '0123456789/|\\KDAkdaABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÇçĞğİıÖöŞşÜü .,-:!',
+            tessedit_pageseg_mode: '6' as never, // PSM 6 = single uniform block of text
         });
 
         const { data: { text, confidence } } = await worker.recognize(ocrSource as File);
