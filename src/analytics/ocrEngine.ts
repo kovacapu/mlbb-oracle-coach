@@ -201,10 +201,11 @@ const extractKDA = (text: string): KDAExtract | null => {
     }
 
     // Strategy 7 — Last resort: first valid triplet ≤20 in all text
+    // Skip all-zero triplets — they're likely UI decorations, not KDA
     const allNums = (text.match(/\b\d{1,2}\b/g) || []).map(Number).filter(n => n <= 30);
     for (let i = 0; i <= allNums.length - 3; i++) {
         const [k, d, a] = allNums.slice(i, i + 3);
-        if (k <= 20 && d <= 20 && a <= 20) {
+        if (k <= 20 && d <= 20 && a <= 20 && (k + d + a) > 0) {
             return { kills: k, deaths: d, assists: a };
         }
     }
@@ -307,19 +308,26 @@ export const scanMatchResult = async (
         } catch {
             worker = await Tesseract.createWorker('eng');
         }
-        await worker.setParameters({
-            // PSM 11 = sparse text (no specific order) — best for MLBB scoreboard columns
-            // PSM 6 = single uniform block, too rigid for multi-column layouts
-            tessedit_pageseg_mode: '11' as never,
-        });
+        // PSM 3 = auto (preserves row structure, best for scoreboards)
+        await worker.setParameters({ tessedit_pageseg_mode: '3' as never });
+        const pass1 = await worker.recognize(ocrSource as File);
 
-        const { data: { text, confidence } } = await worker.recognize(ocrSource as File);
+        // PSM 11 = sparse text — catches numbers that PSM 3 may miss
+        await worker.setParameters({ tessedit_pageseg_mode: '11' as never });
+        const pass2 = await worker.recognize(ocrSource as File);
         await worker.terminate();
 
+        // Use pass with higher confidence, but keep both texts for extraction
+        const { text, confidence } = pass1.data.confidence >= pass2.data.confidence
+            ? pass1.data
+            : pass2.data;
+        // Combine both texts — improves chances of finding player row or numbers
+        const combinedText = pass1.data.text + '\n' + pass2.data.text;
+
         // Step 3: Extract data from text
-        // Keep original multi-line text for player row search
-        const multiLineText = text;
-        const rawText = text.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+        // Use combinedText for all extraction — two OCR passes improve coverage
+        const multiLineText = combinedText;
+        const rawText = combinedText.replace(/\n/g, ' ').replace(/\s+/g, ' ');
 
         // If playerName given, search for their specific row first
         const playerKDA = playerName ? extractKDAForPlayer(multiLineText, playerName) : null;

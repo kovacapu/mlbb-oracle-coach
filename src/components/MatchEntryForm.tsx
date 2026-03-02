@@ -37,6 +37,7 @@ export const MatchEntryForm: React.FC = () => {
     const [isScanning, setIsScanning] = useState(false);
     const [scanError, setScanError] = useState<string | null>(null);
     const [scanDebug, setScanDebug] = useState<string | null>(null);
+    const [scanSuccess, setScanSuccess] = useState<string | null>(null);
     const [playerNickname, setPlayerNickname] = useState<string>('');
 
     // Fetch the user's in-game nickname from profile for OCR player-row matching
@@ -62,24 +63,28 @@ export const MatchEntryForm: React.FC = () => {
         setIsScanning(true);
         setScanError(null);
         setScanDebug(null);
+        setScanSuccess(null);
         try {
             const ocr = await scanMatchResult(file, i18n.language === 'tr' ? 'tur' : 'eng', playerNickname || undefined);
             if (ocr.success && ocr.data) {
                 if (ocr.data.kills !== undefined) setKills(ocr.data.kills);
                 if (ocr.data.deaths !== undefined) setDeaths(ocr.data.deaths);
                 if (ocr.data.assists !== undefined) setAssists(ocr.data.assists);
-                // Auto-select hero if detected
                 if (ocr.data.heroId) setSelectedHeroId(ocr.data.heroId);
-                // Auto-set match result if detected
                 if (ocr.data.result) setResult(ocr.data.result);
+                // Show what was extracted so user can verify correctness
+                const parts: string[] = [];
+                if (ocr.data.kills !== undefined) parts.push(`K:${ocr.data.kills} D:${ocr.data.deaths} A:${ocr.data.assists}`);
+                if (ocr.data.heroName) parts.push(ocr.data.heroName);
+                if (ocr.data.result) parts.push(ocr.data.result === 'Victory' ? '✓ Galibiyet' : '✗ Mağlubiyet');
+                setScanSuccess(`Tarandı — ${parts.join(' · ')} (%${Math.round(ocr.confidence)} güven)`);
             } else {
                 const confPct = Math.round(ocr.confidence);
                 setScanError(t(ocr.errorMsg || 'ocr_error_no_data_found'));
-                // Show OCR debug snippet so user can see what was read
                 if (ocr.rawText) {
-                    setScanDebug(`OCR güven: %${confPct} · Okunan metin: "${ocr.rawText.slice(0, 120).replace(/\n/g, ' ')}"`);
+                    setScanDebug(`OCR güven: %${confPct} · Okunan: "${ocr.rawText.slice(0, 120).replace(/\n/g, ' ')}"`);
                 } else {
-                    setScanDebug(`OCR güven: %${confPct}`);
+                    setScanDebug(`OCR güven: %${confPct} — Metin okunamadı`);
                 }
             }
         } catch {
@@ -198,6 +203,11 @@ export const MatchEntryForm: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-5">
 
                 {/* Alerts */}
+                {scanSuccess && (
+                    <div className="flex items-center gap-3 p-4 rounded-xl border border-mlbb-success/30 bg-mlbb-success/10 text-mlbb-success text-sm font-mono">
+                        <ScanLine className="w-4 h-4 shrink-0" /> {scanSuccess}
+                    </div>
+                )}
                 {scanError && (
                     <div className="flex flex-col gap-1.5 p-4 rounded-xl border border-mlbb-gold/30 bg-mlbb-gold/10 text-mlbb-gold text-sm">
                         <div className="flex items-center gap-3">
