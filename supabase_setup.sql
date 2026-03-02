@@ -69,6 +69,11 @@ CREATE POLICY "Users can update their own matches"
 -- Supabase SQL Editor'de çalıştırın (varsa IF NOT EXISTS ile geçer)
 -- ============================================================
 
+-- Hero Varsayılan Yapı — profiles tablosuna JSONB kolonu
+-- Format: { "chou": { spellId, emblemId, tier1Id, tier2Id, coreId, items[] }, ... }
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS hero_builds JSONB DEFAULT '{}';
+
 -- 5. Eksik kolonlar (MatchEntryForm bunları insert ediyor ama schema'da yoktu)
 ALTER TABLE public.matches
   ADD COLUMN IF NOT EXISTS emblem_id TEXT,
