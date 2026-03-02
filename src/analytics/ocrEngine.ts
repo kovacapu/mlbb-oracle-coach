@@ -223,16 +223,54 @@ const extractGold = (text: string): number | undefined => {
     return parseInt(raw.replace('.', ''), 10);
 };
 
+// ─── Player Row Extraction ────────────────────────────────────────────────────
+
+/**
+ * If playerName is given, find the scoreboard line containing the name
+ * and extract K/D/A from it. MLBB format: "nickname  K  D  A  GOLD"
+ */
+const extractKDAForPlayer = (fullText: string, playerName: string): KDAExtract | null => {
+    const nameLower = playerName.toLowerCase().trim();
+    if (!nameLower) return null;
+
+    const lines = fullText.split(/[\n\r]+/);
+    for (const line of lines) {
+        if (!line.toLowerCase().includes(nameLower)) continue;
+
+        // Pattern: K D A GOLD on the same line
+        const m = line.match(/\b(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{3,5})\b/);
+        if (m) {
+            const k = parseInt(m[1], 10);
+            const d = parseInt(m[2], 10);
+            const a = parseInt(m[3], 10);
+            if (k <= 30 && d <= 30 && a <= 30) {
+                return { kills: k, deaths: d, assists: a };
+            }
+        }
+
+        // Fallback: any three small numbers on this line
+        const nums = (line.match(/\b\d{1,2}\b/g) || []).map(Number).filter(n => n <= 30);
+        if (nums.length >= 3) {
+            return { kills: nums[0], deaths: nums[1], assists: nums[2] };
+        }
+    }
+    return null;
+};
+
 // ─── Main Export ─────────────────────────────────────────────────────────────
 
 /**
  * The Vision Engine (Oracle V10)
  * Scans a Mobile Legends post-match screenshot and extracts K/D/A, gold,
  * hero name, and match result using Tesseract OCR + image preprocessing.
+ *
+ * @param playerName  Optional in-game nickname — when provided, finds the
+ *                    player's specific row in a 10-player scoreboard.
  */
 export const scanMatchResult = async (
     imageFile: File,
     language: string = 'eng',
+    playerName?: string,
 ): Promise<OCRResult> => {
     try {
         // Step 1: Preprocess image for better OCR accuracy
@@ -251,19 +289,21 @@ export const scanMatchResult = async (
         } catch {
             worker = await Tesseract.createWorker('eng');
         }
-        // Char whitelist kaldırıldı: whitelist bazen sayıları atlar
-        // Tesseract varsayılan modda sayıları daha iyi tanır
         await worker.setParameters({
-            tessedit_pageseg_mode: '6' as never, // PSM 6 = single uniform block of text
+            tessedit_pageseg_mode: '6' as never, // PSM 6 = uniform block
         });
 
         const { data: { text, confidence } } = await worker.recognize(ocrSource as File);
         await worker.terminate();
 
         // Step 3: Extract data from text
+        // Keep original multi-line text for player row search
+        const multiLineText = text;
         const rawText = text.replace(/\n/g, ' ').replace(/\s+/g, ' ');
 
-        const kda = extractKDA(rawText);
+        // If playerName given, search for their specific row first
+        const playerKDA = playerName ? extractKDAForPlayer(multiLineText, playerName) : null;
+        const kda = playerKDA ?? extractKDA(rawText);
         const gold = extractGold(rawText);
         const heroMatch = detectHeroFromText(rawText);
         const matchResult = detectResultFromText(rawText);

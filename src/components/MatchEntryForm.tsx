@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getAllHeroes } from '../data/heroes';
 import { getAllItems } from '../data/items';
 import { getAllEmblems, getEmblemById } from '../data/emblems';
@@ -36,6 +36,22 @@ export const MatchEntryForm: React.FC = () => {
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [isScanning, setIsScanning] = useState(false);
     const [scanError, setScanError] = useState<string | null>(null);
+    const [playerNickname, setPlayerNickname] = useState<string>('');
+
+    // Fetch the user's in-game nickname from profile for OCR player-row matching
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!session?.user) return;
+            supabase
+                .from('profiles')
+                .select('nickname')
+                .eq('user_id', session.user.id)
+                .single()
+                .then(({ data }) => {
+                    if (data?.nickname) setPlayerNickname(data.nickname);
+                });
+        });
+    }, []);
 
     const handleImageScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -45,7 +61,7 @@ export const MatchEntryForm: React.FC = () => {
         setIsScanning(true);
         setScanError(null);
         try {
-            const ocr = await scanMatchResult(file, i18n.language === 'tr' ? 'tur' : 'eng');
+            const ocr = await scanMatchResult(file, i18n.language === 'tr' ? 'tur' : 'eng', playerNickname || undefined);
             if (ocr.success && ocr.data) {
                 if (ocr.data.kills !== undefined) setKills(ocr.data.kills);
                 if (ocr.data.deaths !== undefined) setDeaths(ocr.data.deaths);
