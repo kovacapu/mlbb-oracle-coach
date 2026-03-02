@@ -36,6 +36,7 @@ export const MatchEntryForm: React.FC = () => {
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [isScanning, setIsScanning] = useState(false);
     const [scanError, setScanError] = useState<string | null>(null);
+    const [scanDebug, setScanDebug] = useState<string | null>(null);
     const [playerNickname, setPlayerNickname] = useState<string>('');
 
     // Fetch the user's in-game nickname from profile for OCR player-row matching
@@ -60,6 +61,7 @@ export const MatchEntryForm: React.FC = () => {
         e.target.value = '';
         setIsScanning(true);
         setScanError(null);
+        setScanDebug(null);
         try {
             const ocr = await scanMatchResult(file, i18n.language === 'tr' ? 'tur' : 'eng', playerNickname || undefined);
             if (ocr.success && ocr.data) {
@@ -71,7 +73,14 @@ export const MatchEntryForm: React.FC = () => {
                 // Auto-set match result if detected
                 if (ocr.data.result) setResult(ocr.data.result);
             } else {
+                const confPct = Math.round(ocr.confidence);
                 setScanError(t(ocr.errorMsg || 'ocr_error_no_data_found'));
+                // Show OCR debug snippet so user can see what was read
+                if (ocr.rawText) {
+                    setScanDebug(`OCR güven: %${confPct} · Okunan metin: "${ocr.rawText.slice(0, 120).replace(/\n/g, ' ')}"`);
+                } else {
+                    setScanDebug(`OCR güven: %${confPct}`);
+                }
             }
         } catch {
             setScanError(t('ocr_error_engine_failed'));
@@ -190,8 +199,13 @@ export const MatchEntryForm: React.FC = () => {
 
                 {/* Alerts */}
                 {scanError && (
-                    <div className="flex items-center gap-3 p-4 rounded-xl border border-mlbb-gold/30 bg-mlbb-gold/10 text-mlbb-gold text-sm">
-                        <AlertTriangle className="w-4 h-4 shrink-0" /> {scanError}
+                    <div className="flex flex-col gap-1.5 p-4 rounded-xl border border-mlbb-gold/30 bg-mlbb-gold/10 text-mlbb-gold text-sm">
+                        <div className="flex items-center gap-3">
+                            <AlertTriangle className="w-4 h-4 shrink-0" /> {scanError}
+                        </div>
+                        {scanDebug && (
+                            <p className="text-[11px] font-mono text-mlbb-gold/60 break-all pl-7">{scanDebug}</p>
+                        )}
                     </div>
                 )}
                 {submitError && (

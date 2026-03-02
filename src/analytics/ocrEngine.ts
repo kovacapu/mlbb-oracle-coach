@@ -14,6 +14,8 @@ export interface OCRResult {
         result?: 'Victory' | 'Defeat';
     };
     errorMsg?: string;
+    /** Raw OCR text — first 300 chars, for debug/feedback only */
+    rawText?: string;
 }
 
 // ─── Image Preprocessing ────────────────────────────────────────────────────
@@ -228,17 +230,33 @@ const extractGold = (text: string): number | undefined => {
 /**
  * If playerName is given, find the scoreboard line containing the name
  * and extract K/D/A from it. MLBB format: "nickname  K  D  A  GOLD"
+ *
+ * Also checks up to 2 lines after the name line in case OCR splits
+ * the name and stats onto adjacent lines (common with PSM sparse mode).
  */
 const extractKDAForPlayer = (fullText: string, playerName: string): KDAExtract | null => {
     const nameLower = playerName.toLowerCase().trim();
     if (!nameLower) return null;
 
-    const lines = fullText.split(/[\n\r]+/);
-    for (const line of lines) {
-        if (!line.toLowerCase().includes(nameLower)) continue;
+    // Normalize OCR quirks: OCR often misreads l↔1, O↔0, I↔1
+    const normalizeOcr = (s: string) =>
+        s.toLowerCase().replace(/[|l1]/g, 'i').replace(/0/g, 'o');
 
-        // Pattern: K D A GOLD on the same line
-        const m = line.match(/\b(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{3,5})\b/);
+    const normalizedName = normalizeOcr(nameLower);
+
+    const lines = fullText.split(/[\n\r]+/);
+    for (let i = 0; i < lines.length; i++) {
+        const lineLower = lines[i].toLowerCase();
+        const lineNorm = normalizeOcr(lineLower);
+
+        // Match exact nickname or normalized variant
+        if (!lineLower.includes(nameLower) && !lineNorm.includes(normalizedName)) continue;
+
+        // Try this line + next 2 lines concatenated (stats may be on next line)
+        const window = lines.slice(i, i + 3).join(' ');
+
+        // Pattern: K D A GOLD on the same/nearby line
+        const m = window.match(/\b(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{3,5})\b/);
         if (m) {
             const k = parseInt(m[1], 10);
             const d = parseInt(m[2], 10);
@@ -248,8 +266,8 @@ const extractKDAForPlayer = (fullText: string, playerName: string): KDAExtract |
             }
         }
 
-        // Fallback: any three small numbers on this line
-        const nums = (line.match(/\b\d{1,2}\b/g) || []).map(Number).filter(n => n <= 30);
+        // Fallback: any three small numbers in the window
+        const nums = (window.match(/\b\d{1,2}\b/g) || []).map(Number).filter(n => n <= 30);
         if (nums.length >= 3) {
             return { kills: nums[0], deaths: nums[1], assists: nums[2] };
         }
@@ -290,7 +308,9 @@ export const scanMatchResult = async (
             worker = await Tesseract.createWorker('eng');
         }
         await worker.setParameters({
-            tessedit_pageseg_mode: '6' as never, // PSM 6 = uniform block
+            // PSM 11 = sparse text (no specific order) — best for MLBB scoreboard columns
+            // PSM 6 = single uniform block, too rigid for multi-column layouts
+            tessedit_pageseg_mode: '11' as never,
         });
 
         const { data: { text, confidence } } = await worker.recognize(ocrSource as File);
@@ -308,6 +328,9 @@ export const scanMatchResult = async (
         const heroMatch = detectHeroFromText(rawText);
         const matchResult = detectResultFromText(rawText);
 
+        // First 300 chars of OCR text for debug feedback
+        const rawTextSnippet = text.trim().slice(0, 300);
+
         // Need at least KDA to be useful
         const hasData = kda !== null || gold !== undefined;
 
@@ -319,6 +342,7 @@ export const scanMatchResult = async (
                     confidence,
                     data: {},
                     errorMsg: 'ocr_error_low_confidence',
+                    rawText: rawTextSnippet,
                 };
             }
             return {
@@ -326,6 +350,7 @@ export const scanMatchResult = async (
                 confidence,
                 data: {},
                 errorMsg: 'ocr_error_no_data_found',
+                rawText: rawTextSnippet,
             };
         }
 
@@ -338,14 +363,16 @@ export const scanMatchResult = async (
                 ...(heroMatch ? { heroId: heroMatch.heroId, heroName: heroMatch.heroName } : {}),
                 ...(matchResult ? { result: matchResult } : {}),
             },
+            rawText: rawTextSnippet,
         };
 
-    } catch {
+    } catch (err) {
         return {
             success: false,
             confidence: 0,
             data: {},
             errorMsg: 'ocr_error_engine_failed',
+            rawText: err instanceof Error ? err.message.slice(0, 100) : undefined,
         };
     }
 };
