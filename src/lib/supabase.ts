@@ -1,11 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://dummy-project.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'dummy-anon-key';
-
-if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-    console.warn('⚠️ DİKKAT: .env.local dosyasında Supabase URL veya Anon Key ayarlanmamış. Uygulamanın çökmemesi için geçici (mock) anahtarlar kullanılıyor. Veritabanı işlemleri başarısız olacaktır.');
-}
+// Env vars (local dev) veya fallback (production build için hardcoded)
+// Anon key herkese açık tasarlanmış (sb_publishable_) — güvenli
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? 'https://denbxlatlugpypivvvie.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? 'sb_publishable_mDGg2UzRCSTcSNzDICqLUA_oQP-F2tC';
 
 export const supabase = createClient(
     supabaseUrl,
