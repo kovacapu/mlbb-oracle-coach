@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#07070f"/>
+
+  <!-- Outer glow ring -->
+  <circle cx="256" cy="240" r="185" fill="none" stroke="#00f0ff" stroke-width="10" opacity="0.25"/>
+
+  <!-- Eye outline (almond shape) -->
+  <path d="M 60 240 C 120 140 192 110 256 110 C 320 110 392 140 452 240 C 392 340 320 370 256 370 C 192 370 120 340 60 240 Z"
+        fill="none" stroke="#00f0ff" stroke-width="10"/>
+
+  <!-- Purple inner ring -->
+  <circle cx="256" cy="240" r="90" fill="#0c0c18" stroke="#7c3aed" stroke-width="6"/>
+
+  <!-- Iris -->
+  <circle cx="256" cy="240" r="72" fill="url(#iris_grad)"/>
+
+  <!-- Pupil -->
+  <circle cx="256" cy="240" r="36" fill="#07070f"/>
+
+  <!-- Gold center spark -->
+  <circle cx="256" cy="240" r="16" fill="#ffbf00" opacity="0.9"/>
+
+  <!-- Highlight -->
+  <circle cx="278" cy="220" r="8" fill="white" opacity="0.4"/>
+
+  <!-- Scan line decoration -->
+  <line x1="60" y1="240" x2="166" y2="240" stroke="#00f0ff" stroke-width="2" opacity="0.5"/>
+  <line x1="346" y1="240" x2="452" y2="240" stroke="#00f0ff" stroke-width="2" opacity="0.5"/>
+
+  <!-- Corner brackets -->
+  <path d="M 30 80 L 30 30 L 80 30" fill="none" stroke="#00f0ff" stroke-width="6" opacity="0.6"/>
+  <path d="M 482 80 L 482 30 L 432 30" fill="none" stroke="#00f0ff" stroke-width="6" opacity="0.6"/>
+  <path d="M 30 432 L 30 482 L 80 482" fill="none" stroke="#00f0ff" stroke-width="6" opacity="0.6"/>
+  <path d="M 482 432 L 482 482 L 432 482" fill="none" stroke="#00f0ff" stroke-width="6" opacity="0.6"/>
+
+  <!-- ORACLE label -->
+  <text x="256" y="466" font-family="monospace" font-size="42" font-weight="bold"
+        fill="#00f0ff" text-anchor="middle" letter-spacing="8" opacity="0.85">ORACLE</text>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="iris_grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#7c3aed" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#07070f" stop-opacity="1"/>
+    </radialGradient>
+  </defs>
+</svg>
