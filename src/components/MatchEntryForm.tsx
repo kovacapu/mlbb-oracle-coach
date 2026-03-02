@@ -109,22 +109,20 @@ export const MatchEntryForm: React.FC = () => {
         e.preventDefault();
         setSubmitError(null);
         if (!selectedHeroId) { setSubmitError(t('form_err_hero')); return; }
-        if (!selectedSpellId) { setSubmitError("Lütfen bir savaş büyüsü seçin."); return; }
-        if (!selectedEmblemId || !selectedTier1Id || !selectedTier2Id || !selectedCoreId) { setSubmitError("Lütfen amblemi, alt yetenekleri ve ana yeteneği seçin."); return; }
         setIsSubmitting(true);
         try {
-            const resultPayload = MLAnalyzer.analyzeMatch(selectedHeroId, kills, deaths, assists, selectedItems, selectedEmblemId, selectedTier1Id, selectedTier2Id);
+            const resultPayload = MLAnalyzer.analyzeMatch(selectedHeroId, kills, deaths, assists, selectedItems, selectedEmblemId || undefined, selectedTier1Id || undefined, selectedTier2Id || undefined);
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             if (sessionError) throw sessionError;
             if (!session?.user) throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
             const { error: insertError } = await supabase.from('matches').insert([{
                 user_id: session.user.id,
                 hero_id: selectedHeroId,
-                emblem_id: selectedEmblemId,
-                emblem_tier1_id: selectedTier1Id,
-                emblem_tier2_id: selectedTier2Id,
-                emblem_core_id: selectedCoreId,
-                battle_spell_id: selectedSpellId,
+                ...(selectedEmblemId ? { emblem_id: selectedEmblemId } : {}),
+                ...(selectedTier1Id ? { emblem_tier1_id: selectedTier1Id } : {}),
+                ...(selectedTier2Id ? { emblem_tier2_id: selectedTier2Id } : {}),
+                ...(selectedCoreId ? { emblem_core_id: selectedCoreId } : {}),
+                ...(selectedSpellId ? { battle_spell_id: selectedSpellId } : {}),
                 kills, deaths, assists, result,
                 items: selectedItems,
                 playstyle_tag: resultPayload.playStyle,
