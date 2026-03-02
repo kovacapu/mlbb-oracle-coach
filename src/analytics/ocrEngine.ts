@@ -173,30 +173,37 @@ const extractKDA = (text: string): KDAExtract | null => {
         };
     }
 
-    // Strategy 5 — Three standalone small numbers (≤2 digits) appearing together,
-    // separated only by whitespace/newlines. Picks the first such triplet found.
-    // Avoids matching things like gold (4-5 digits) or timestamps.
+    // Strategy 5 — MLBB scoreboard format: "K D A GOLD" on same line
+    // e.g. "3 6 6 9013" or "krc Kovac 3 6 6 9013 6.4"
+    // Pattern: three 1-2 digit numbers followed by a 4-5 digit gold value
+    const scoreboardLine = text.match(/\b(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{4,5})\b/);
+    if (scoreboardLine) {
+        const k = parseInt(scoreboardLine[1], 10);
+        const d = parseInt(scoreboardLine[2], 10);
+        const a = parseInt(scoreboardLine[3], 10);
+        if (k <= 30 && d <= 30 && a <= 30) {
+            return { kills: k, deaths: d, assists: a };
+        }
+    }
+
+    // Strategy 6 — Three standalone small numbers on same line (exactly 3)
     const allLines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
     for (const line of allLines) {
         const nums = line.match(/\b(\d{1,2})\b/g);
         if (nums && nums.length === 3) {
             const [k, d, a] = nums.map(Number);
-            // Sanity check: reasonable KDA values
             if (k <= 30 && d <= 30 && a <= 30) {
                 return { kills: k, deaths: d, assists: a };
             }
         }
     }
 
-    // Strategy 6 — Scan all lines for any three-number sequence (last resort)
+    // Strategy 7 — Last resort: first valid triplet ≤20 in all text
     const allNums = (text.match(/\b\d{1,2}\b/g) || []).map(Number).filter(n => n <= 30);
-    if (allNums.length >= 3) {
-        // Try to find the most "KDA-like" triplet: all ≤20
-        for (let i = 0; i <= allNums.length - 3; i++) {
-            const [k, d, a] = allNums.slice(i, i + 3);
-            if (k <= 20 && d <= 20 && a <= 20) {
-                return { kills: k, deaths: d, assists: a };
-            }
+    for (let i = 0; i <= allNums.length - 3; i++) {
+        const [k, d, a] = allNums.slice(i, i + 3);
+        if (k <= 20 && d <= 20 && a <= 20) {
+            return { kills: k, deaths: d, assists: a };
         }
     }
 
