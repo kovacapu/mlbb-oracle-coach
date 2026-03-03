@@ -5,7 +5,7 @@ import { SPELLS } from '../data/spells';
 import type { MatchRecord } from '../types';
 
 const GEMINI_API_URL =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 export interface GeminiMatchInput {
     heroId: string;
@@ -80,8 +80,7 @@ export async function generateGeminiCoachNote(
 ): Promise<string> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey) {
-        const viteKeys = Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')).join(', ');
-        throw new Error(`VITE_GEMINI_API_KEY bulunamadı. Mevcut değişkenler: [${viteKeys}]`);
+        throw new Error('Gemini API anahtarı yapılandırılmamış.');
     }
 
     const prompt = buildPrompt(match, recentMatches);
