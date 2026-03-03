@@ -5,6 +5,7 @@ import { getAllEmblems, getEmblemById } from '../data/emblems';
 import { SPELLS } from '../data/spells';
 import { Sword, Plus, X, Shield, Goal, Crosshair, Loader2, Zap, BrainCircuit, Upload, ScanLine, AlertTriangle, AlertCircle } from 'lucide-react';
 import { MLAnalyzer } from '../services/MLAnalyzer';
+import { generateGeminiCoachNote } from '../services/geminiCoach';
 import { getHeroById } from '../data/heroes';
 
 import { scanMatchResult } from '../analytics/ocrEngine';
@@ -43,6 +44,9 @@ export const MatchEntryForm: React.FC = () => {
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
     const [isItemModalOpen, setIsItemModalOpen] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<MatchAnalysisResult | null>(null);
+    const [aiCoachNote, setAiCoachNote] = useState<string | undefined>(undefined);
+    const [isLoadingAI, setIsLoadingAI] = useState(false);
+    const [aiError, setAiError] = useState<string | undefined>(undefined);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [isScanning, setIsScanning] = useState(false);
@@ -165,7 +169,43 @@ export const MatchEntryForm: React.FC = () => {
                 coach_note: resultPayload.coachNote
             }]);
             if (insertError) throw insertError;
+
+            // Show local analysis immediately, then load AI note async
+            setAiCoachNote(undefined);
+            setAiError(undefined);
             setAnalysisResult(resultPayload);
+            setIsLoadingAI(true);
+
+            // Fetch recent matches for context (last 5, fire and forget)
+            supabase
+                .from('matches')
+                .select('id,hero_id,kills,deaths,assists,result,created_at')
+                .eq('user_id', session.user.id)
+                .order('created_at', { ascending: false })
+                .limit(5)
+                .then(({ data: recentMatches }) => {
+                    generateGeminiCoachNote(
+                        {
+                            heroId: selectedHeroId,
+                            kills, deaths, assists,
+                            result,
+                            itemIds: selectedItems,
+                            emblemId: selectedEmblemId || undefined,
+                            spellId: selectedSpellId || undefined,
+                            playStyle: resultPayload.playStyle,
+                        },
+                        (recentMatches ?? []) as any,
+                    )
+                        .then(note => {
+                            setAiCoachNote(note);
+                        })
+                        .catch(err => {
+                            setAiError(err.message ?? 'AI notu alınamadı.');
+                        })
+                        .finally(() => {
+                            setIsLoadingAI(false);
+                        });
+                });
         } catch (err: any) {
             setSubmitError(err.message || t('form_err_generic'));
         } finally {
@@ -175,6 +215,9 @@ export const MatchEntryForm: React.FC = () => {
 
     const resetForm = () => {
         setAnalysisResult(null);
+        setAiCoachNote(undefined);
+        setAiError(undefined);
+        setIsLoadingAI(false);
         setSelectedHeroId(''); setSelectedSpellId('');
         setKills(0); setDeaths(0); setAssists(0);
         setSelectedItems([]); setResult('Victory');
@@ -183,7 +226,15 @@ export const MatchEntryForm: React.FC = () => {
     };
 
     if (analysisResult) {
-        return <PostMatchAnalysis analysis={analysisResult} onClose={resetForm} />;
+        return (
+            <PostMatchAnalysis
+                analysis={analysisResult}
+                onClose={resetForm}
+                aiCoachNote={aiCoachNote}
+                isLoadingAI={isLoadingAI}
+                aiError={aiError}
+            />
+        );
     }
 
     const selectedEmblemData = selectedEmblemId ? getEmblemById(selectedEmblemId) : null;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Target, Lightbulb, Trophy, ShieldAlert, HeartHandshake, Plus, AlertTriangle } from 'lucide-react';
+import { Target, Lightbulb, Trophy, ShieldAlert, HeartHandshake, Plus, AlertTriangle, BrainCircuit, Loader2 } from 'lucide-react';
 import type { MatchAnalysisResult } from '../services/MLAnalyzer';
 import { getItemById } from '../data/items';
 import { getEmblemById } from '../data/emblems';
@@ -9,6 +9,9 @@ import { ImageWithFallback } from './ImageWithFallback';
 interface PostMatchAnalysisProps {
     analysis: MatchAnalysisResult;
     onClose: () => void;
+    aiCoachNote?: string;
+    isLoadingAI?: boolean;
+    aiError?: string;
 }
 
 const PLAYSTYLE_KEY_MAP: Record<string, string> = {
@@ -18,7 +21,7 @@ const PLAYSTYLE_KEY_MAP: Record<string, string> = {
     'Balanced': 'playstyle_balanced',
 };
 
-export const PostMatchAnalysis: React.FC<PostMatchAnalysisProps> = ({ analysis, onClose }) => {
+export const PostMatchAnalysis: React.FC<PostMatchAnalysisProps> = ({ analysis, onClose, aiCoachNote, isLoadingAI, aiError }) => {
     const { t } = useTranslation();
     const [isVisible, setIsVisible] = useState(false);
 
@@ -176,6 +179,38 @@ export const PostMatchAnalysis: React.FC<PostMatchAnalysisProps> = ({ analysis, 
                                         </div>
                                     );
                                 })()}
+                            </div>
+                        )}
+
+                        {/* Gemini AI Coaching Section */}
+                        {(isLoadingAI || aiCoachNote || aiError) && (
+                            <div className="rounded-2xl border border-mlbb-purple/30 bg-mlbb-purple/5 p-5 space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="relative">
+                                        <div className="absolute inset-0 blur-sm bg-mlbb-purple/40 rounded-full" />
+                                        <BrainCircuit className="relative w-5 h-5 text-mlbb-purple" />
+                                    </div>
+                                    <p className="text-xs font-mono font-bold text-mlbb-purple uppercase tracking-widest">Gemini AI Koç</p>
+                                    {isLoadingAI && (
+                                        <Loader2 className="w-3.5 h-3.5 text-mlbb-purple/60 animate-spin ml-auto" />
+                                    )}
+                                </div>
+
+                                {isLoadingAI && !aiCoachNote && (
+                                    <div className="space-y-2">
+                                        <div className="h-3 bg-mlbb-purple/10 rounded animate-pulse w-full" />
+                                        <div className="h-3 bg-mlbb-purple/10 rounded animate-pulse w-5/6" />
+                                        <div className="h-3 bg-mlbb-purple/10 rounded animate-pulse w-4/6" />
+                                    </div>
+                                )}
+
+                                {aiError && !aiCoachNote && (
+                                    <p className="text-[11px] font-mono text-mlbb-danger/70 leading-relaxed">{aiError}</p>
+                                )}
+
+                                {aiCoachNote && (
+                                    <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">{aiCoachNote}</p>
+                                )}
                             </div>
                         )}
 
