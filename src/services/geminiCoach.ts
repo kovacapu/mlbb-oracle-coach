@@ -80,7 +80,8 @@ export async function generateGeminiCoachNote(
 ): Promise<string> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey) {
-        throw new Error('VITE_GEMINI_API_KEY tanımlı değil. .env.local dosyasına ekle.');
+        const viteKeys = Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')).join(', ');
+        throw new Error(`VITE_GEMINI_API_KEY bulunamadı. Mevcut değişkenler: [${viteKeys}]`);
     }
 
     const prompt = buildPrompt(match, recentMatches);
